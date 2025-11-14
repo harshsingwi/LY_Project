@@ -12,25 +12,25 @@ import argparse
 import os
 import sys
 import json
-import joblib
 
-# Import your modules
+# Import project modules
 import hyperspectral_preprocessing
 import train_model
+
 from predict import (
     load_models,
-    predict_new_image,
+    predict_single_image,
     predict_batch
 )
 
 # ----------------------------------------------------------------------
-# Utility printing
+# Utility print helpers
 # ----------------------------------------------------------------------
 
 def header(title):
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(title)
-    print("="*70)
+    print("=" * 70)
 
 # ----------------------------------------------------------------------
 # PREPROCESS COMMAND
@@ -39,74 +39,79 @@ def header(title):
 def run_preprocess(args):
     header("RUNNING PREPROCESSING PIPELINE")
 
-    base_path = "."
+    base = "."
 
-    raw_folder = os.path.join(base_path, "raw_images")
-    hdr_folder = os.path.join(base_path, "raw_hdr_data")
-    processed_folder = os.path.join(base_path, "processed_data")
+    raw_folder = os.path.join(base, "raw_images")
+    hdr_folder = os.path.join(base, "raw_hdr_data")
+    processed_folder = os.path.join(base, "processed_data")
 
     print("Raw images folder:      ", raw_folder)
     print("Raw HDR folder:         ", hdr_folder)
     print("Processed output folder:", processed_folder)
 
-    # Step 1 — Convert RAW to reduced ENVI
+    # Convert RAW → ENVI
     hyperspectral_preprocessing.convert_raw_to_envi(
         raw_folder, hdr_folder, processed_folder
     )
 
-    # Step 2 — Auto-create labels.json
+    # Create label file (labels.json)
     hyperspectral_preprocessing.create_label_file(processed_folder)
 
     print("\nPreprocessing complete ✔")
-    print("➡ Now update labels.json OR use auto-labeling if available.")
+    print("If using auto-labeling, now update labels.json accordingly.")
 
 # ----------------------------------------------------------------------
 # TRAIN COMMAND
 # ----------------------------------------------------------------------
 
 def run_train(args):
-    header("TRAINING ML MODEL")
-
+    header("TRAINING MODEL")
     train_model.main()
-
     print("\nTraining completed ✔")
-    print("Saved models available in: saved_models/")
+    print("Saved models are inside: saved_models/")
 
 # ----------------------------------------------------------------------
 # PREDICT COMMAND
 # ----------------------------------------------------------------------
 
 def run_predict(args):
-    header("PREDICTION")
+    header("RUNNING PREDICTION")
 
     model, scaler, pca, metadata = load_models()
     class_names = metadata["class_names"]
 
     input_path = args.path
 
+    # Batch mode
     if args.batch:
         if not os.path.isdir(input_path):
-            print(f"[ERROR] {input_path} is not a folder.")
-            return
-        predict_batch(input_path, model, scaler, pca, class_names)
-    else:
-        if not os.path.isfile(input_path):
-            print(f"[ERROR] {input_path} is not a valid file.")
+            print(f"[ERROR] Folder not found: {input_path}")
             return
 
-        pred_class, conf, all_probs = predict_new_image(
+        predict_batch(input_path, model, scaler, pca, class_names)
+        return
+
+    # Single image mode
+    else:
+        if not os.path.exists(input_path):
+            print(f"[ERROR] File not found: {input_path}")
+            return
+
+        pred_class, conf, prob_dict = predict_single_image(
             input_path, model, scaler, pca, class_names
         )
 
-        if pred_class:
-            print("\nPrediction Result")
-            print("-"*50)
-            print("Image:       ", input_path)
-            print("Class:       ", pred_class)
-            print(f"Confidence:   {conf:.4f} ({conf*100:.2f}%)")
-            print("\nClass probabilities:")
-            for cls, p in all_probs.items():
-                print(f"  {cls}: {p:.4f} ({p*100:.2f}%)")
+        if pred_class is None:
+            print("[ERROR] Prediction failed.")
+            return
+
+        print("\n--- Prediction Result ---")
+        print("File:         ", input_path)
+        print("Predicted:    ", pred_class)
+        print(f"Confidence:    {conf:.4f} ({conf*100:.2f}%)")
+        print("\nClass Probabilities:")
+        for cls, p in prob_dict.items():
+            print(f"  {cls}: {p:.4f} ({p*100:.2f}%)")
 
 # ----------------------------------------------------------------------
 # INFO COMMAND
@@ -115,16 +120,16 @@ def run_predict(args):
 def run_info(args):
     header("MODEL INFO")
 
-    model_path = "saved_models/model_metadata.json"
+    metadata_path = os.path.join("saved_models", "model_metadata.json")
 
-    if not os.path.exists(model_path):
-        print("No trained model found. Train it using:\n\n  python cli.py train\n")
+    if not os.path.exists(metadata_path):
+        print("No model found. Train one using:\n  python cli.py train\n")
         return
 
-    with open(model_path, "r") as f:
-        meta = json.load(f)
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
 
-    print(json.dumps(meta, indent=4))
+    print(json.dumps(metadata, indent=4))
 
 # ----------------------------------------------------------------------
 # ARGPARSE SETUP
@@ -139,30 +144,28 @@ def build_parser():
     sub = parser.add_subparsers(dest="command", required=True)
 
     # preprocess
-    p = sub.add_parser("preprocess",
-                       help="Convert RAW → ENVI and create labels.json")
+    p = sub.add_parser("preprocess", help="Convert RAW → ENVI & create labels.json")
     p.set_defaults(func=run_preprocess)
 
     # train
-    t = sub.add_parser("train",
-                       help="Train SVM model on processed_data/")
+    t = sub.add_parser("train", help="Train SVM model on processed_data/")
     t.set_defaults(func=run_train)
 
     # predict
-    pr = sub.add_parser("predict",
-                        help="Predict class for a file or folder")
+    pr = sub.add_parser("predict", help="Predict class for file or folder")
     pr.add_argument("path", help="Path to .hdr file or folder")
-    pr.add_argument("--batch", action="store_true",
-                    help="Process all .hdr files in folder")
+    pr.add_argument("--batch", action="store_true", help="Run prediction for all .hdr files in folder")
     pr.set_defaults(func=run_predict)
 
     # info
-    i = sub.add_parser("info",
-                       help="Show saved model metadata")
+    i = sub.add_parser("info", help="Show metadata of trained model")
     i.set_defaults(func=run_info)
 
     return parser
 
+# ----------------------------------------------------------------------
+# MAIN ENTRY
+# ----------------------------------------------------------------------
 
 def main():
     parser = build_parser()

@@ -2,4 +2,10 @@
 raw_images/
 raw_hdr_data/
 
+# Cache, temp output
+__pycache__/
+*.pyc
+*.pyo
 
+*.bak
+*.tmp

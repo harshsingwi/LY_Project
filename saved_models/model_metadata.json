@@ -1,0 +1,11 @@
+{
+    "class_names": [
+        "Healthy",
+        "Biotic",
+        "Abiotic"
+    ],
+    "n_components": 4,
+    "explained_variance": 0.9869356751441956,
+    "test_accuracy": 0.6451612903225806,
+    "test_f1": 0.6559139784946235
+}

@@ -1,190 +1,163 @@
 """
-Prediction Script for New Hyperspectral Images
-Compatible with the updated training pipeline
+Prediction module for Grapevine Hyperspectral Classification
+Uses: SVM + PCA + StandardScaler
+Supports: Single image & batch prediction
 """
 
 import os
-import sys
 import json
 import joblib
 import numpy as np
-from pathlib import Path
 import spectral.io.envi as envi
 
-# -----------------------------------------------------------
-# LOADING TRAINED MODELS
-# -----------------------------------------------------------
 
-def load_models(model_folder='saved_models'):
-    """
-    Load trained SVM model, scaler, PCA transformer, and metadata
-    """
-    print("\nLoading trained model...")
+# ----------------------------------------------------------------------
+# MODEL LOADING
+# ----------------------------------------------------------------------
 
-    model = joblib.load(os.path.join(model_folder, "svm.pkl"))
-    scaler = joblib.load(os.path.join(model_folder, "scaler.pkl"))
-    pca = joblib.load(os.path.join(model_folder, "pca.pkl"))
+def load_models(model_folder="saved_models"):
+    """Load trained SVM model, PCA, Scaler, and metadata."""
 
-    # Default class names (same order as training)
-    class_names = ["Healthy", "Biotic", "Abiotic"]
+    model_path = os.path.join(model_folder, "svm.pkl")
+    scaler_path = os.path.join(model_folder, "scaler.pkl")
+    pca_path = os.path.join(model_folder, "pca.pkl")
+    metadata_path = os.path.join(model_folder, "model_metadata.json")
 
-    print("✓ Models loaded successfully")
-    print("✓ PCA components:", pca.n_components_)
+    if not os.path.exists(model_path):
+        raise FileNotFoundError("svm.pkl not found. Train the model first.")
 
-    return model, scaler, pca, class_names
+    print("\nLoading trained models...")
+
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
+    pca = joblib.load(pca_path)
+
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+
+    print(f"Models loaded successfully ✔")
+    print(f"PCA components:       {metadata['n_components']}")
+    print(f"Test set accuracy:    {metadata['test_accuracy']:.4f}")
+
+    return model, scaler, pca, metadata
 
 
-# -----------------------------------------------------------
-# HYPERSPECTRAL IMAGE LOADING (hdr + img)
-# -----------------------------------------------------------
+# ----------------------------------------------------------------------
+# IMAGE LOADING
+# ----------------------------------------------------------------------
 
 def load_hyperspectral_image(hdr_path):
-    """
-    Load ENVI image (.hdr + .img)
-    """
+    """Load ENVI hyperspectral image using .hdr and .img."""
+
     try:
         img_path = hdr_path.replace(".hdr", ".img")
         img = envi.open(hdr_path, img_path)
         cube = img.load()
         return cube
     except Exception as e:
-        print(f"[ERROR] Cannot load hyperspectral image: {hdr_path}")
-        print("Reason:", str(e))
+        print(f"[ERROR] Failed to load image: {hdr_path} → {e}")
         return None
 
 
+# ----------------------------------------------------------------------
+# FEATURE EXTRACTION
+# ----------------------------------------------------------------------
+
 def extract_mean_spectrum(cube):
-    """Extract mean spectrum (bands,)"""
+    """Extract mean reflectance (bands only)."""
     return np.mean(cube, axis=(0, 1))
 
 
-# -----------------------------------------------------------
+# ----------------------------------------------------------------------
 # SINGLE IMAGE PREDICTION
-# -----------------------------------------------------------
+# ----------------------------------------------------------------------
 
 def predict_single_image(hdr_path, model, scaler, pca, class_names):
-    print(f"\nProcessing file: {hdr_path}")
+    """
+    Predict class for ONE hyperspectral image.
+
+    Returns:
+        predicted_class (str)
+        confidence (float)
+        prob_dict (dict)
+    """
+
+    print(f"\nProcessing image: {hdr_path}")
 
     cube = load_hyperspectral_image(hdr_path)
     if cube is None:
-        return None, None, None
+        return None, 0.0, {}
 
-    print(f"Image shape: {cube.shape}")
+    spectrum = extract_mean_spectrum(cube)
+    X = spectrum.reshape(1, -1)
 
-    spectrum = extract_mean_spectrum(cube).reshape(1, -1)
-
-    X_scaled = scaler.transform(spectrum)
+    # Preprocessing
+    X_scaled = scaler.transform(X)
     X_pca = pca.transform(X_scaled)
 
-    pred_label = model.predict(X_pca)[0]
-    pred_proba = model.predict_proba(X_pca)[0]
+    # Prediction
+    probs = model.predict_proba(X_pca)[0]
+    label = model.predict(X_pca)[0]
 
-    predicted_class = class_names[pred_label]
-    confidence = float(pred_proba[pred_label])
+    predicted_class = class_names[label]
+    confidence = probs[label]
 
-    all_probs = {class_names[i]: float(pred_proba[i]) for i in range(len(class_names))}
+    prob_dict = {
+        class_names[i]: float(probs[i])
+        for i in range(len(class_names))
+    }
 
-    return predicted_class, confidence, all_probs
+    return predicted_class, confidence, prob_dict
 
 
-# -----------------------------------------------------------
-# BATCH PREDICTION FOR A FOLDER
-# -----------------------------------------------------------
+# ----------------------------------------------------------------------
+# BATCH PREDICTION
+# ----------------------------------------------------------------------
 
-def predict_batch(folder, model, scaler, pca, class_names):
-    hdr_files = [f for f in os.listdir(folder) if f.endswith(".hdr")]
+def predict_batch(folder_path, model, scaler, pca, class_names):
+    """Predict all .hdr images inside a folder."""
 
-    if not hdr_files:
-        print("\n[ERROR] No .hdr files found in folder:", folder)
+    hdr_files = [f for f in os.listdir(folder_path) if f.endswith(".hdr")]
+
+    if len(hdr_files) == 0:
+        print(f"\n[ERROR] No .hdr files found in folder: {folder_path}")
         return
 
-    print(f"\nFound {len(hdr_files)} images in folder '{folder}'")
+    print(f"\nPredicting {len(hdr_files)} images from {folder_path}...")
     print("=" * 70)
 
     results = []
 
-    for f in hdr_files:
-        hdr_path = os.path.join(folder, f)
+    for file in hdr_files:
+        hdr_path = os.path.join(folder_path, file)
 
-        predicted_class, confidence, all_probs = predict_single_image(
+        pred_class, conf, prob_dict = predict_single_image(
             hdr_path, model, scaler, pca, class_names
         )
 
-        if predicted_class is None:
+        if pred_class is None:
             continue
 
-        print("\n-----------------------------------------")
-        print(f"File: {f}")
-        print(f"Predicted Class: {predicted_class}")
-        print(f"Confidence: {confidence:.4f} ({confidence * 100:.2f}%)")
-
-        res = {
-            "filename": f,
-            "predicted_class": predicted_class,
-            "confidence": confidence,
-            "probabilities": all_probs
+        result = {
+            "filename": file,
+            "predicted_class": pred_class,
+            "confidence": conf,
+            "probabilities": prob_dict
         }
-        results.append(res)
+        results.append(result)
 
-    # Save predictions
-    out_path = os.path.join(folder, "predictions.json")
-    with open(out_path, "w") as f:
+        print("\n" + "-" * 60)
+        print("File:", file)
+        print("Predicted:", pred_class)
+        print(f"Confidence: {conf:.4f} ({conf*100:.2f}%)")
+        print("Probabilities:")
+        for cls, p in prob_dict.items():
+            print(f"  {cls}: {p:.4f}")
+
+    # Save batch result
+    output_file = os.path.join(folder_path, "predictions.json")
+    with open(output_file, "w") as f:
         json.dump(results, f, indent=4)
 
-    print("\nPredictions saved to:", out_path)
+    print("\nPredictions saved to:", output_file)
     print("=" * 70)
-
-
-# -----------------------------------------------------------
-# MAIN SCRIPT ENTRY POINT
-# -----------------------------------------------------------
-
-def main():
-
-    if len(sys.argv) < 2:
-        print("""
-Usage:
-  python predict.py <path_to_hdr_file>
-  python predict.py <folder_path> --batch
-
-Examples:
-  python predict.py test_images/img_001.hdr
-  python predict.py test_images/ --batch
-""")
-        sys.exit(1)
-
-    model, scaler, pca, class_names = load_models()
-
-    input_path = sys.argv[1]
-
-    # Batch mode
-    if len(sys.argv) > 2 and sys.argv[2] == "--batch":
-        if not os.path.isdir(input_path):
-            print("[ERROR] Batch mode requires a folder path")
-            return
-
-        predict_batch(input_path, model, scaler, pca, class_names)
-
-    # Single file mode
-    else:
-        if not os.path.isfile(input_path):
-            print("[ERROR] File not found:", input_path)
-            return
-
-        pred_class, conf, probs = predict_single_image(input_path, model, scaler, pca, class_names)
-
-        if pred_class is None:
-            return
-
-        print("\n============= PREDICTION RESULT =============")
-        print("File:", input_path)
-        print("Predicted Class:", pred_class)
-        print("Confidence:", f"{conf:.4f} ({conf*100:.2f}%)")
-        print("All Probabilities:")
-        for cls, prob in probs.items():
-            print(f"  {cls}: {prob:.4f}")
-        print("=============================================")
-
-
-if __name__ == "__main__":
-    main()

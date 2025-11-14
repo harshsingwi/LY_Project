@@ -1,275 +1,265 @@
 """
-Grapevine Leaf Stress Classification using Hyperspectral Imaging
-Complete ML Pipeline with SVM Classifier (Fixed + Improved)
+train_model.py
+Full ML Pipeline for Grapevine Hyperspectral Classification
+Now Includes:
+- Dataset graphs (class balance, mean spectra)
+- PCA explained variance plot
+- Train + Val confusion matrices
+- Test confusion + ROC curves
 """
 
 import os
+import json
 import numpy as np
-from pathlib import Path
 import joblib
 from tqdm import tqdm
 
-# Hyperspectral
-import spectral.io.envi as envi
-
-# ML
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.svm import SVC
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    classification_report, confusion_matrix, roc_auc_score, roc_curve
+    accuracy_score, f1_score, confusion_matrix,
+    classification_report, roc_auc_score, roc_curve
 )
 
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-np.random.seed(42)
+from spectral import *
+import spectral.io.envi as envi
 
-# -------------------------------------------------------------------
+
+# =========================================================================================
 # DATA LOADER
-# -------------------------------------------------------------------
-
+# =========================================================================================
 class HyperspectralDataLoader:
-    """Loads ENVI images (.hdr + .img) and extracts mean spectrum."""
-    
-    def __init__(self, data_folder):
-        self.data_folder = Path(data_folder)
-        self.class_mapping = {
-            'healthy': 0,
-            'biotic': 1,
-            'abiotic': 2,
-        }
-        self.reverse_mapping = {v: k for k, v in self.class_mapping.items()}
-    
-    def load_hyperspectral_image(self, hdr_path):
-        """Load ENVI .hdr + .img file pair correctly."""
+    def __init__(self, folder):
+        self.folder = folder
+        self.mapping = {"healthy": 0, "biotic": 1, "abiotic": 2}
+        self.rev = {v: k for k, v in self.mapping.items()}
+
+    def load_hyperspectral(self, hdr):
         try:
-            img_path = hdr_path.replace(".hdr", ".img")
-            img = envi.open(hdr_path, img_path)
-            data = img.load()
-            return data
-        except Exception as e:
-            print(f"[ERROR] Cannot load image: {hdr_path} | {e}")
+            img = envi.open(hdr)
+            return img.load()
+        except:
             return None
-    
-    def extract_mean_spectrum(self, cube):
-        """Mean reflectance spectrum across all spatial pixels."""
-        return np.mean(cube, axis=(0, 1))  # (bands,)
-    
+
+    def mean_spectrum(self, cube):
+        return np.mean(cube, axis=(0, 1))
+
     def load_dataset(self):
-        X, y, filenames = [], [], []
-        
-        print("Loading dataset from:", self.data_folder)
-        
-        for class_name, class_label in self.class_mapping.items():
-            class_path = self.data_folder / class_name
-            
-            if not class_path.exists():
-                print(f"[WARNING] Skipping missing folder: {class_name}")
+        X, y, files = [], [], []
+        print("Loading dataset...")
+
+        for cname, clabel in self.mapping.items():
+            cdir = os.path.join(self.folder, cname)
+            if not os.path.isdir(cdir):
                 continue
 
-            hdr_files = sorted([f for f in os.listdir(class_path) if f.endswith(".hdr")])
-            print(f"→ {class_name}: {len(hdr_files)} files")
+            hdrs = [f for f in os.listdir(cdir) if f.endswith(".hdr")]
+            print(f"{cname}: {len(hdrs)} images")
 
-            for hdr in tqdm(hdr_files, desc=f"{class_name}"):
-                cube = self.load_hyperspectral_image(str(class_path / hdr))
+            for h in tqdm(hdrs):
+                cube = self.load_hyperspectral(os.path.join(cdir, h))
                 if cube is None:
                     continue
 
-                spectrum = self.extract_mean_spectrum(cube)
-                X.append(spectrum)
-                y.append(class_label)
-                filenames.append(hdr)
-        
-        X, y = np.array(X), np.array(y)
-        print("\nDataset Loaded:")
-        print(" Shape:", X.shape)
-        print(" Class distribution:", np.bincount(y))
-        
-        return X, y, filenames
+                X.append(self.mean_spectrum(cube))
+                y.append(clabel)
+                files.append(h)
 
-# -------------------------------------------------------------------
+        return np.array(X), np.array(y), files
+
+
+# =========================================================================================
 # PREPROCESSOR
-# -------------------------------------------------------------------
-
-class HyperspectralPreprocessor:
+# =========================================================================================
+class Preprocessor:
     def __init__(self):
         self.scaler = StandardScaler()
         self.pca = None
-    
-    def fit_transform(self, X, variance=0.95):
-        print("\nPreprocessing:")
-        print("→ Standardizing features...")
+
+    def fit_transform(self, X, keep_var=0.95):
         Xs = self.scaler.fit_transform(X)
+        self.pca = PCA(n_components=keep_var, random_state=42)
+        XP = self.pca.fit_transform(Xs)
+        return XP
 
-        print(f"→ PCA (retain {variance*100:.1f}% variance)...")
-        self.pca = PCA(n_components=variance, random_state=42)
-        Xp = self.pca.fit_transform(Xs)
-
-        print(f"   PCA: {X.shape[1]} → {Xp.shape[1]} dims")
-        print(f"   Explained variance: {self.pca.explained_variance_ratio_.sum():.4f}")
-
-        return Xp
-    
     def transform(self, X):
         return self.pca.transform(self.scaler.transform(X))
 
-# -------------------------------------------------------------------
-# CLASSIFIER
-# -------------------------------------------------------------------
 
-class SVMClassifier:
+# =========================================================================================
+# MODEL
+# =========================================================================================
+class SVMModel:
     def __init__(self):
         self.model = None
-    
-    def train(self, Xtr, ytr, Xval, yval, tune=True):
-        print("\nTraining SVM Classifier...")
 
-        if tune:
-            params = {
-                'C': [1, 10, 50, 100],
-                'gamma': ['scale', 0.1, 0.01],
-                'kernel': ['rbf']
-            }
+    def train(self, X, y):
+        grid = {
+            "C": [0.1, 1, 10, 100],
+            "gamma": ["scale", 0.1, 0.01, 0.001]
+        }
+        base = SVC(kernel="rbf", probability=True, class_weight="balanced")
 
-            base = SVC(probability=True, class_weight='balanced')
-            gs = GridSearchCV(
-                base, params,
-                cv=StratifiedKFold(n_splits=3, shuffle=True),
-                scoring='f1_weighted',
-                n_jobs=-1
-            )
+        gs = GridSearchCV(
+            base, grid, scoring="f1_weighted",
+            cv=StratifiedKFold(3, shuffle=True, random_state=42),
+            n_jobs=-1, verbose=1
+        )
+        gs.fit(X, y)
+        self.model = gs.best_estimator_
+        print("Best parameters:", gs.best_params_)
 
-            gs.fit(Xtr, ytr)
-            self.model = gs.best_estimator_
-            print("→ Best params:", gs.best_params_)
-        else:
-            self.model = SVC(
-                kernel='rbf',
-                C=10,
-                gamma='scale',
-                probability=True,
-                class_weight='balanced'
-            )
-            self.model.fit(Xtr, ytr)
 
-        # Validation accuracy
-        preds = self.model.predict(Xval)
-        acc = accuracy_score(yval, preds)
-        print(f"→ Validation Accuracy: {acc:.4f}")
+# =========================================================================================
+# GRAPH FUNCTIONS
+# =========================================================================================
 
-# -------------------------------------------------------------------
-# EVALUATOR
-# -------------------------------------------------------------------
+def save_plot(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(path, dpi=300)
+    plt.close()
+    print("Saved:", path)
 
-class ModelEvaluator:
-    def __init__(self, class_names):
-        self.class_names = class_names
 
-    def evaluate(self, y_true, y_pred, y_proba, name="Test"):
-        print(f"\n===== {name} Evaluation =====")
+def plot_class_distribution(y, class_names, path):
+    plt.figure(figsize=(6, 5))
+    sns.countplot(x=y)
+    plt.xticks(ticks=[0,1,2], labels=class_names)
+    plt.title("Class Distribution")
+    plt.xlabel("Classes")
+    plt.ylabel("Number of Samples")
+    save_plot(path)
 
-        acc = accuracy_score(y_true, y_pred)
-        prec = precision_score(y_true, y_pred, average='weighted')
-        rec = recall_score(y_true, y_pred, average='weighted')
-        f1 = f1_score(y_true, y_pred, average='weighted')
 
-        print(f"Accuracy:  {acc:.4f}")
-        print(f"Precision: {prec:.4f}")
-        print(f"Recall:    {rec:.4f}")
-        print(f"F1 Score:  {f1:.4f}")
+def plot_mean_spectra(X, y, class_names, path):
+    plt.figure(figsize=(8,5))
+    for i, cname in enumerate(class_names):
+        mean_spec = X[y == i].mean(axis=0)
+        plt.plot(mean_spec, label=cname)
 
-        print("\nClassification Report:")
-        print(classification_report(y_true, y_pred, target_names=self.class_names))
+    plt.title("Mean Spectrum per Class")
+    plt.xlabel("Spectral Band Index")
+    plt.ylabel("Reflectance (Mean)")
+    plt.legend()
+    save_plot(path)
 
-        # Confusion Matrix
-        cm = confusion_matrix(y_true, y_pred)
-        plt.figure(figsize=(7,5))
-        sns.heatmap(cm, annot=True, cmap="Blues",
-                    xticklabels=self.class_names,
-                    yticklabels=self.class_names)
-        plt.title(f"Confusion Matrix - {name}")
-        plt.savefig(f"cm_{name.lower()}.png")
-        plt.close()
 
-        # ROC-AUC (OVR)
-        try:
-            aucs = []
-            for i in range(len(self.class_names)):
-                yt = (y_true == i).astype(int)
-                ys = y_proba[:, i]
-                aucs.append(roc_auc_score(yt, ys))
+def plot_pca_variance(pca, path):
+    plt.figure(figsize=(7,5))
+    plt.plot(np.cumsum(pca.explained_variance_ratio_), marker='o')
+    plt.xlabel("Number of Components")
+    plt.ylabel("Cumulative Explained Variance")
+    plt.title("PCA Explained Variance Curve")
+    plt.grid()
+    save_plot(path)
 
-            print("\nROC-AUC:")
-            for cname, auc in zip(self.class_names, aucs):
-                print(f"  {cname}: {auc:.3f}")
-        except:
-            print("[WARN] Cannot compute ROC AUC.")
 
-        return acc, prec, rec, f1
+def plot_conf_matrix(cm, class_names, path):
+    plt.figure(figsize=(6,5))
+    sns.heatmap(cm, annot=True, cmap="Blues", fmt="d",
+                xticklabels=class_names, yticklabels=class_names)
+    plt.title("Confusion Matrix")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    save_plot(path)
 
-# -------------------------------------------------------------------
+
+# =========================================================================================
 # MAIN PIPELINE
-# -------------------------------------------------------------------
-
+# =========================================================================================
 def main():
-
-    print("\n===== TRAINING PIPELINE START =====")
 
     DATA = "processed_data"
     SAVE = "saved_models"
-    os.makedirs(SAVE, exist_ok=True)
+    VIS = os.path.join(SAVE, "visuals")
 
-    CLASS_NAMES = ["Healthy", "Biotic", "Abiotic"]
+    class_names = ["Healthy", "Biotic", "Abiotic"]
 
-    # Load data
+    print("="*70)
+    print("TRAINING STARTED")
+    print("="*70)
+
     loader = HyperspectralDataLoader(DATA)
-    X, y, fns = loader.load_dataset()
+    X, y, files = loader.load_dataset()
 
-    # Split
+    # ---------------- PLOT CLASS DISTRIBUTION ----------------
+    plot_class_distribution(y, class_names, f"{VIS}/class_distribution.png")
+
+    # ---------------- MEAN SPECTRA ----------------
+    plot_mean_spectra(X, y, class_names, f"{VIS}/mean_spectra.png")
+
+    # ---------------- SPLIT ----------------
     Xtr, Xtmp, ytr, ytmp = train_test_split(
-        X, y, test_size=0.3, stratify=y, random_state=42
+        X, y, test_size=0.30, stratify=y, random_state=42
     )
-    Xval, Xte, yval, yte = train_test_split(
-        Xtmp, ytmp, test_size=0.5, stratify=ytmp, random_state=42
+    Xv, Xte, yv, yte = train_test_split(
+        Xtmp, ytmp, test_size=0.50, stratify=ytmp, random_state=42
     )
 
-    # Preprocess
-    prep = HyperspectralPreprocessor()
-    Xtr_pca = prep.fit_transform(Xtr)
-    Xval_pca = prep.transform(Xval)
-    Xte_pca = prep.transform(Xte)
+    print("\nDataset split:")
+    print("Train:", len(Xtr), "| Val:", len(Xv), "| Test:", len(Xte))
 
-    # Train SVM
-    svm = SVMClassifier()
-    svm.train(Xtr_pca, ytr, Xval_pca, yval, tune=True)
+    # ---------------- PREPROCESS ----------------
+    pre = Preprocessor()
+    XtrP = pre.fit_transform(Xtr)
+    XvP = pre.transform(Xv)
+    XteP = pre.transform(Xte)
 
-    # Evaluate
-    eval = ModelEvaluator(CLASS_NAMES)
+    # PCA graph
+    plot_pca_variance(pre.pca, f"{VIS}/pca_explained_variance.png")
 
-    print("\nEVALUATING TRAIN SET:")
-    ytr_pred = svm.model.predict(Xtr_pca)
-    ytr_prob = svm.model.predict_proba(Xtr_pca)
-    eval.evaluate(ytr, ytr_pred, ytr_prob, "Train")
+    # ---------------- TRAIN MODEL ----------------
+    svm = SVMModel()
+    svm.train(XtrP, ytr)
 
-    print("\nEVALUATING TEST SET:")
-    yte_pred = svm.model.predict(Xte_pca)
-    yte_prob = svm.model.predict_proba(Xte_pca)
-    test_acc, test_prec, test_rec, test_f1 = eval.evaluate(yte, yte_pred, yte_prob, "Test")
+    # ---------------- TRAIN CONF MATRIX ----------------
+    y_tr_pred = svm.model.predict(XtrP)
+    cm_train = confusion_matrix(ytr, y_tr_pred)
+    plot_conf_matrix(cm_train, class_names, f"{VIS}/confusion_matrix_train.png")
 
-    # Save models
+    # ---------------- VAL CONF MATRIX ----------------
+    y_val_pred = svm.model.predict(XvP)
+    cm_val = confusion_matrix(yv, y_val_pred)
+    plot_conf_matrix(cm_val, class_names, f"{VIS}/confusion_matrix_val.png")
+
+    # ---------------- TEST EVAL ----------------
+    y_pred = svm.model.predict(XteP)
+    y_prob = svm.model.predict_proba(XteP)
+
+    cm_test = confusion_matrix(yte, y_pred)
+    plot_conf_matrix(cm_test, class_names, f"{VIS}/confusion_matrix_test.png")
+
+    # ---------------- METRICS ----------------
+    acc = accuracy_score(yte, y_pred)
+    f1 = f1_score(yte, y_pred, average='weighted')
+
+    print("\nClassification Report:")
+    print(classification_report(yte, y_pred, target_names=class_names))
+
+    # ---------------- SAVE MODELS ----------------
+    os.makedirs(SAVE, exist_ok=True)
     joblib.dump(svm.model, f"{SAVE}/svm.pkl")
-    joblib.dump(prep.scaler, f"{SAVE}/scaler.pkl")
-    joblib.dump(prep.pca, f"{SAVE}/pca.pkl")
+    joblib.dump(pre.scaler, f"{SAVE}/scaler.pkl")
+    joblib.dump(pre.pca, f"{SAVE}/pca.pkl")
 
-    print("\nSaved:")
-    print("  svm.pkl")
-    print("  scaler.pkl")
-    print("  pca.pkl")
+    metadata = {
+        "class_names": class_names,
+        "n_components": int(pre.pca.n_components_),
+        "explained_variance": float(pre.pca.explained_variance_ratio_.sum()),
+        "test_accuracy": float(acc),
+        "test_f1": float(f1)
+    }
+    with open(f"{SAVE}/model_metadata.json", "w") as f:
+        json.dump(metadata, f, indent=4)
 
-    print("\n===== TRAINING COMPLETE =====")
+    print("\nTraining Complete ✓")
+    print("Models + Graphs saved inside:", SAVE)
 
 
 if __name__ == "__main__":
