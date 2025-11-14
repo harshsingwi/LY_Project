@@ -1,0 +1,818 @@
+{
+    "2020-09-10_003": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_004": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_005": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_006": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_007": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_008": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_009": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_010": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_011": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_012": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_013": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_014": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_015": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_016": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_017": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_018": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_019": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_020": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_021": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_022": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_023": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_024": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_025": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_026": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_027": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_028": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_029": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_030": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_031": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_032": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_033": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_034": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_035": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_036": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_037": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_038": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_039": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_040": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_041": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_042": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_043": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_044": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_045": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_046": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_047": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_048": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_049": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_050": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_051": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_052": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_053": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_054": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_055": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_056": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_057": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_058": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_059": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_060": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_061": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_062": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_063": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_064": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_065": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_066": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_067": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_068": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_069": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_070": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_071": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_072": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_073": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_074": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_075": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_076": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_077": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_078": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_079": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_080": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_081": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_082": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_083": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_084": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_085": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_086": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_087": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_088": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_089": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_090": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_091": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_092": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_093": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_094": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_095": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_096": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_097": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_098": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_099": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_101": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_102": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_103": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_104": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_105": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_106": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_107": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_109": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_110": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_111": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-10_112": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_113": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_114": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_115": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_116": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-10_117": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_118": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_119": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_120": {
+        "class": "abiotic",
+        "notes": ""
+    },
+    "2020-09-10_121": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_122": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_123": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-10_124": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-11_001": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_002": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_003": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_004": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_005": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_006": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_007": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_008": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_009": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_010": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_011": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_012": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_013": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_014": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_015": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_016": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_017": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_018": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_019": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-11_020": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-14_002": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_003": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_004": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_005": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_006": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_007": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_008": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_009": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_010": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_011": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_012": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_013": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_014": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_015": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_016": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_017": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-14_018": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-14_019": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-14_020": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-14_021": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-09-14_022": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_023": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_024": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_025": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-14_026": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-09-14_027": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_028": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_029": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_030": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-09-14_031": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_001": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_002": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_003": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_004": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_005": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_006": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_007": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_008": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_009": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_010": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_011": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_012": {
+        "class": "biotic",
+        "notes": ""
+    },
+    "2020-10-02_013": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_014": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_015": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_016": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_017": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_018": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_019": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_020": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_021": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_022": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_023": {
+        "class": "healthy",
+        "notes": ""
+    },
+    "2020-10-02_024": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_025": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_026": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_027": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_028": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_029": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_030": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_031": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_032": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_033": {
+        "class": "unknown",
+        "notes": ""
+    },
+    "2020-10-02_034": {
+        "class": "unknown",
+        "notes": ""
+    }
+}

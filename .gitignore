@@ -1,0 +1,5 @@
+# Do NOT upload huge raw files
+raw_images/
+raw_hdr_data/
+
+
