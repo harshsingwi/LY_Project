@@ -18,3 +18,6 @@ tqdm>=4.65.0
 
 # Optional but recommended
 pandas>=2.0.0
+
+scipy 
+imbalanced-learn

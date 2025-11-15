@@ -1,124 +1,100 @@
 """
-train_model.py
-Full ML Pipeline for Grapevine Hyperspectral Classification
-Now Includes:
-- Dataset graphs (class balance, mean spectra)
-- PCA explained variance plot
-- Train + Val confusion matrices
-- Test confusion + ROC curves
+train_model.py – FINAL OPTIMIZED VERSION
+Best configuration:
+- PCA: hybrid (min 60 comps OR 99% variance, whichever is larger)
+- Balancing: SMOTE + class_weight='balanced'
+- Feature extraction: MEDIAN spectrum (+ Savitzky–Golay smoothing)
+- Stronger SVM grid search
+- Robust visualizations
 """
 
-import os
-import json
+import os, json
 import numpy as np
 import joblib
-from tqdm import tqdm
-
-from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.svm import SVC
-from sklearn.metrics import (
-    accuracy_score, f1_score, confusion_matrix,
-    classification_report, roc_auc_score, roc_curve
-)
-
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import tqdm
+from pathlib import Path
 
-from spectral import *
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report, roc_curve, roc_auc_score
+from sklearn.decomposition import PCA
+from sklearn.svm import SVC
+
 import spectral.io.envi as envi
 
+# Optional smoothing
+from scipy.signal import savgol_filter
 
-# =========================================================================================
-# DATA LOADER
-# =========================================================================================
+# SMOTE oversampling
+from imblearn.over_sampling import SMOTE
+
+np.random.seed(42)
+
+# ===============================
+#        DATA LOADER
+# ===============================
 class HyperspectralDataLoader:
-    def __init__(self, folder):
-        self.folder = folder
-        self.mapping = {"healthy": 0, "biotic": 1, "abiotic": 2}
-        self.rev = {v: k for k, v in self.mapping.items()}
+    def __init__(self, data_folder):
+        self.data_folder = Path(data_folder)
+        self.class_mapping = {"healthy": 0, "biotic": 1, "abiotic": 2}
+        self.class_names = ["Healthy", "Biotic", "Abiotic"]
 
-    def load_hyperspectral(self, hdr):
-        try:
-            img = envi.open(hdr)
-            return img.load()
-        except:
-            return None
+    def load_cube(self, hdr_path):
+        hdr_path = str(hdr_path)
+        # try .img then .dat
+        for ext in (".img", ".dat"):
+            candidate = hdr_path.replace(".hdr", ext)
+            if os.path.exists(candidate):
+                try:
+                    img = envi.open(hdr_path, candidate)
+                    return img.load().astype(np.float32)
+                except:
+                    pass
+        return None
 
-    def mean_spectrum(self, cube):
-        return np.mean(cube, axis=(0, 1))
+    def extract_median_spectrum(self, cube):
+        spec = np.median(cube, axis=(0, 1))
+
+        # Stronger smoothing
+        window = 11 if cube.shape[2] >= 11 else (cube.shape[2] // 2 * 2 + 1)
+        if window >= 5:
+            spec = savgol_filter(spec, window_length=window, polyorder=3)
+        return spec
 
     def load_dataset(self):
         X, y, files = [], [], []
-        print("Loading dataset...")
 
-        for cname, clabel in self.mapping.items():
-            cdir = os.path.join(self.folder, cname)
-            if not os.path.isdir(cdir):
+        print("Loading dataset:", self.data_folder)
+        for cname, label in self.class_mapping.items():
+            folder = self.data_folder / cname
+            if not folder.exists():
                 continue
 
-            hdrs = [f for f in os.listdir(cdir) if f.endswith(".hdr")]
-            print(f"{cname}: {len(hdrs)} images")
+            hdrs = sorted([f for f in os.listdir(folder) if f.endswith(".hdr")])
+            print(f"{cname}: {len(hdrs)} samples")
 
-            for h in tqdm(hdrs):
-                cube = self.load_hyperspectral(os.path.join(cdir, h))
+            for h in tqdm(hdrs, desc=f"Loading {cname}"):
+                hdr_path = folder / h
+                cube = self.load_cube(hdr_path)
                 if cube is None:
                     continue
 
-                X.append(self.mean_spectrum(cube))
-                y.append(clabel)
+                spec = self.extract_median_spectrum(cube)
+                X.append(spec)
+                y.append(label)
                 files.append(h)
 
-        return np.array(X), np.array(y), files
+        X = np.array(X)
+        y = np.array(y)
+        print("Loaded X:", X.shape, " y:", y.shape)
+        return X, y
 
 
-# =========================================================================================
-# PREPROCESSOR
-# =========================================================================================
-class Preprocessor:
-    def __init__(self):
-        self.scaler = StandardScaler()
-        self.pca = None
-
-    def fit_transform(self, X, keep_var=0.95):
-        Xs = self.scaler.fit_transform(X)
-        self.pca = PCA(n_components=keep_var, random_state=42)
-        XP = self.pca.fit_transform(Xs)
-        return XP
-
-    def transform(self, X):
-        return self.pca.transform(self.scaler.transform(X))
-
-
-# =========================================================================================
-# MODEL
-# =========================================================================================
-class SVMModel:
-    def __init__(self):
-        self.model = None
-
-    def train(self, X, y):
-        grid = {
-            "C": [0.1, 1, 10, 100],
-            "gamma": ["scale", 0.1, 0.01, 0.001]
-        }
-        base = SVC(kernel="rbf", probability=True, class_weight="balanced")
-
-        gs = GridSearchCV(
-            base, grid, scoring="f1_weighted",
-            cv=StratifiedKFold(3, shuffle=True, random_state=42),
-            n_jobs=-1, verbose=1
-        )
-        gs.fit(X, y)
-        self.model = gs.best_estimator_
-        print("Best parameters:", gs.best_params_)
-
-
-# =========================================================================================
-# GRAPH FUNCTIONS
-# =========================================================================================
-
+# ===============================
+#         PLOTTING HELPERS
+# ===============================
 def save_plot(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     plt.tight_layout()
@@ -126,141 +102,142 @@ def save_plot(path):
     plt.close()
     print("Saved:", path)
 
-
-def plot_class_distribution(y, class_names, path):
+def plot_conf_matrix(cm, labels, path, title="Confusion Matrix"):
     plt.figure(figsize=(6, 5))
-    sns.countplot(x=y)
-    plt.xticks(ticks=[0,1,2], labels=class_names)
-    plt.title("Class Distribution")
-    plt.xlabel("Classes")
-    plt.ylabel("Number of Samples")
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=labels, yticklabels=labels)
+    plt.title(title)
     save_plot(path)
 
+def plot_roc_curves(y_true, y_prob, labels, path):
+    plt.figure(figsize=(7, 6))
+    for i, cls in enumerate(labels):
+        y_bin = (y_true == i).astype(int)
+        try:
+            fpr, tpr, _ = roc_curve(y_bin, y_prob[:, i])
+            auc = roc_auc_score(y_bin, y_prob[:, i])
+            plt.plot(fpr, tpr, label=f"{cls} (AUC={auc:.3f})")
+        except:
+            continue
 
-def plot_mean_spectra(X, y, class_names, path):
-    plt.figure(figsize=(8,5))
-    for i, cname in enumerate(class_names):
-        mean_spec = X[y == i].mean(axis=0)
-        plt.plot(mean_spec, label=cname)
-
-    plt.title("Mean Spectrum per Class")
-    plt.xlabel("Spectral Band Index")
-    plt.ylabel("Reflectance (Mean)")
+    plt.plot([0, 1], [0, 1], "k--")
+    plt.xlabel("FPR")
+    plt.ylabel("TPR")
     plt.legend()
     save_plot(path)
 
 
-def plot_pca_variance(pca, path):
-    plt.figure(figsize=(7,5))
-    plt.plot(np.cumsum(pca.explained_variance_ratio_), marker='o')
-    plt.xlabel("Number of Components")
-    plt.ylabel("Cumulative Explained Variance")
-    plt.title("PCA Explained Variance Curve")
-    plt.grid()
-    save_plot(path)
-
-
-def plot_conf_matrix(cm, class_names, path):
-    plt.figure(figsize=(6,5))
-    sns.heatmap(cm, annot=True, cmap="Blues", fmt="d",
-                xticklabels=class_names, yticklabels=class_names)
-    plt.title("Confusion Matrix")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    save_plot(path)
-
-
-# =========================================================================================
-# MAIN PIPELINE
-# =========================================================================================
+# ===============================
+#        MAIN TRAINING
+# ===============================
 def main():
-
     DATA = "processed_data"
     SAVE = "saved_models"
     VIS = os.path.join(SAVE, "visuals")
-
-    class_names = ["Healthy", "Biotic", "Abiotic"]
-
-    print("="*70)
-    print("TRAINING STARTED")
-    print("="*70)
+    os.makedirs(SAVE, exist_ok=True)
+    os.makedirs(VIS, exist_ok=True)
 
     loader = HyperspectralDataLoader(DATA)
-    X, y, files = loader.load_dataset()
+    X, y = loader.load_dataset()
 
-    # ---------------- PLOT CLASS DISTRIBUTION ----------------
-    plot_class_distribution(y, class_names, f"{VIS}/class_distribution.png")
-
-    # ---------------- MEAN SPECTRA ----------------
-    plot_mean_spectra(X, y, class_names, f"{VIS}/mean_spectra.png")
-
-    # ---------------- SPLIT ----------------
-    Xtr, Xtmp, ytr, ytmp = train_test_split(
+    # Split dataset
+    X_train, X_temp, y_train, y_temp = train_test_split(
         X, y, test_size=0.30, stratify=y, random_state=42
     )
-    Xv, Xte, yv, yte = train_test_split(
-        Xtmp, ytmp, test_size=0.50, stratify=ytmp, random_state=42
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp, y_temp, test_size=0.50, stratify=y_temp, random_state=42
     )
 
-    print("\nDataset split:")
-    print("Train:", len(Xtr), "| Val:", len(Xv), "| Test:", len(Xte))
+    print(f"Train: {len(y_train)} | Val: {len(y_val)} | Test: {len(y_test)}")
 
-    # ---------------- PREPROCESS ----------------
-    pre = Preprocessor()
-    XtrP = pre.fit_transform(Xtr)
-    XvP = pre.transform(Xv)
-    XteP = pre.transform(Xte)
+    # Scaling
+    scaler = StandardScaler()
+    X_train_s = scaler.fit_transform(X_train)
+    X_val_s = scaler.transform(X_val)
+    X_test_s = scaler.transform(X_test)
 
-    # PCA graph
-    plot_pca_variance(pre.pca, f"{VIS}/pca_explained_variance.png")
+    # PCA — hybrid strategy
+    pca_full = PCA(n_components=0.99, random_state=42)
+    pca_full.fit(X_train_s)
 
-    # ---------------- TRAIN MODEL ----------------
-    svm = SVMModel()
-    svm.train(XtrP, ytr)
+    MIN_COMPONENTS = 60
+    components = max(MIN_COMPONENTS, pca_full.n_components_)
 
-    # ---------------- TRAIN CONF MATRIX ----------------
-    y_tr_pred = svm.model.predict(XtrP)
-    cm_train = confusion_matrix(ytr, y_tr_pred)
-    plot_conf_matrix(cm_train, class_names, f"{VIS}/confusion_matrix_train.png")
+    print(f"PCA 99% variance → {pca_full.n_components_}, using {components} components")
 
-    # ---------------- VAL CONF MATRIX ----------------
-    y_val_pred = svm.model.predict(XvP)
-    cm_val = confusion_matrix(yv, y_val_pred)
-    plot_conf_matrix(cm_val, class_names, f"{VIS}/confusion_matrix_val.png")
+    pca = PCA(n_components=components, random_state=42)
+    X_train_p = pca.fit_transform(X_train_s)
+    X_val_p = pca.transform(X_val_s)
+    X_test_p = pca.transform(X_test_s)
 
-    # ---------------- TEST EVAL ----------------
-    y_pred = svm.model.predict(XteP)
-    y_prob = svm.model.predict_proba(XteP)
+    # Apply SMOTE
+    print("Applying SMOTE...")
+    sm = SMOTE(random_state=42)
+    X_train_p, y_train = sm.fit_resample(X_train_p, y_train)
 
-    cm_test = confusion_matrix(yte, y_pred)
-    plot_conf_matrix(cm_test, class_names, f"{VIS}/confusion_matrix_test.png")
+    # Stronger SVM grid
+    svm = SVC(kernel="rbf", probability=True, class_weight="balanced")
 
-    # ---------------- METRICS ----------------
-    acc = accuracy_score(yte, y_pred)
-    f1 = f1_score(yte, y_pred, average='weighted')
+    param_grid = {
+        "C": [0.1, 1, 10, 50, 100, 200],
+        "gamma": ["scale", 0.1, 0.01, 0.001, 0.0001],
+    }
 
-    print("\nClassification Report:")
-    print(classification_report(yte, y_pred, target_names=class_names))
+    grid = GridSearchCV(
+        svm,
+        param_grid,
+        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
+        scoring="f1_weighted",
+        n_jobs=-1,
+        verbose=1,
+    )
+    grid.fit(X_train_p, y_train)
+    model = grid.best_estimator_
 
-    # ---------------- SAVE MODELS ----------------
-    os.makedirs(SAVE, exist_ok=True)
-    joblib.dump(svm.model, f"{SAVE}/svm.pkl")
-    joblib.dump(pre.scaler, f"{SAVE}/scaler.pkl")
-    joblib.dump(pre.pca, f"{SAVE}/pca.pkl")
+    print("Best Params:", grid.best_params_)
+
+    # Evaluation function
+    def evaluate(name, Xp, yt):
+        yp = model.predict(Xp)
+        yp_prob = model.predict_proba(Xp)
+
+        cm = confusion_matrix(yt, yp)
+        plot_conf_matrix(cm, loader.class_names, os.path.join(VIS, f"cm_{name}.png"))
+
+        try:
+            plot_roc_curves(yt, yp_prob, loader.class_names, os.path.join(VIS, f"roc_{name}.png"))
+        except:
+            pass
+
+        acc = accuracy_score(yt, yp)
+        f1 = f1_score(yt, yp, average="weighted")
+        print(f"[{name}] Acc={acc:.4f}  F1={f1:.4f}")
+        print(classification_report(yt, yp, target_names=loader.class_names))
+        return acc, f1
+
+    train_acc, train_f1 = evaluate("train", X_train_p, y_train)
+    val_acc, val_f1 = evaluate("val", X_val_p, y_val)
+    test_acc, test_f1 = evaluate("test", X_test_p, y_test)
+
+    # Save models
+    joblib.dump(model, os.path.join(SAVE, "svm.pkl"))
+    joblib.dump(scaler, os.path.join(SAVE, "scaler.pkl"))
+    joblib.dump(pca, os.path.join(SAVE, "pca.pkl"))
 
     metadata = {
-        "class_names": class_names,
-        "n_components": int(pre.pca.n_components_),
-        "explained_variance": float(pre.pca.explained_variance_ratio_.sum()),
-        "test_accuracy": float(acc),
-        "test_f1": float(f1)
+        "class_names": loader.class_names,
+        "pca_components": int(components),
+        "train_acc": float(train_acc),
+        "val_acc": float(val_acc),
+        "test_acc": float(test_acc),
+        "train_f1": float(train_f1),
+        "val_f1": float(val_f1),
+        "test_f1": float(test_f1),
     }
-    with open(f"{SAVE}/model_metadata.json", "w") as f:
+    with open(os.path.join(SAVE, "model_metadata.json"), "w") as f:
         json.dump(metadata, f, indent=4)
 
-    print("\nTraining Complete ✓")
-    print("Models + Graphs saved inside:", SAVE)
-
+    print("Training complete. Models saved to saved_models/")
 
 if __name__ == "__main__":
     main()
