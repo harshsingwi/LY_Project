@@ -9,14 +9,14 @@ import json
 import joblib
 import numpy as np
 import spectral.io.envi as envi
+from scipy.signal import savgol_filter
 
 
 # ----------------------------------------------------------------------
 # MODEL LOADING
 # ----------------------------------------------------------------------
-
 def load_models(model_folder="saved_models"):
-    """Load trained SVM model, PCA, Scaler, and metadata."""
+    """Load trained SVM model, PCA, Scaler, and metadata safely."""
 
     model_path = os.path.join(model_folder, "svm.pkl")
     scaler_path = os.path.join(model_folder, "scaler.pkl")
@@ -32,12 +32,30 @@ def load_models(model_folder="saved_models"):
     scaler = joblib.load(scaler_path)
     pca = joblib.load(pca_path)
 
-    with open(metadata_path, "r") as f:
-        metadata = json.load(f)
+    if os.path.exists(metadata_path):
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+    else:
+        metadata = {}
+        print("[WARN] model_metadata.json not found – using empty metadata.")
 
-    print(f"Models loaded successfully ✔")
-    print(f"PCA components:       {metadata['n_components']}")
-    print(f"Test set accuracy:    {metadata['test_accuracy']:.4f}")
+    print("Models loaded successfully ✔")
+
+    if hasattr(pca, "n_components_"):
+        n_components = pca.n_components_
+    elif hasattr(pca, "n_components"):
+        n_components = pca.n_components
+    else:
+        n_components = metadata.get("pca_components", "Unknown")
+
+    print(f"PCA components:       {n_components}")
+
+    if "val_acc" in metadata:
+        print(f"Validation accuracy:  {metadata['val_acc']:.4f}")
+    elif "test_acc" in metadata:
+        print(f"Test set accuracy:    {metadata['test_acc']:.4f}")
+    else:
+        print("Validation/Test accuracy: (not found in metadata)")
 
     return model, scaler, pca, metadata
 
@@ -45,36 +63,40 @@ def load_models(model_folder="saved_models"):
 # ----------------------------------------------------------------------
 # IMAGE LOADING
 # ----------------------------------------------------------------------
-
 def load_hyperspectral_image(hdr_path):
-    """Load ENVI hyperspectral image using .hdr and .img."""
-
+    """Load ENVI hyperspectral image using .hdr and .img file pair."""
     try:
         img_path = hdr_path.replace(".hdr", ".img")
         img = envi.open(hdr_path, img_path)
         cube = img.load()
-        return cube
+        return cube.astype(np.float32)
     except Exception as e:
-        print(f"[ERROR] Failed to load image: {hdr_path} → {e}")
+        print(f"[ERROR] Cannot load hyperspectral image: {hdr_path} → {e}")
         return None
 
 
 # ----------------------------------------------------------------------
-# FEATURE EXTRACTION
+# FEATURE EXTRACTION (MATCHES TRAINING)
 # ----------------------------------------------------------------------
-
-def extract_mean_spectrum(cube):
-    """Extract mean reflectance (bands only)."""
-    return np.mean(cube, axis=(0, 1))
+def extract_median_spectrum(cube):
+    """
+    Extract median spectrum across all pixels and apply
+    Savitzky–Golay smoothing (same as in training).
+    """
+    spec = np.median(cube, axis=(0, 1))
+    bands = cube.shape[2]
+    window = 11 if bands >= 11 else max(5, bands // 2 * 2 + 1)
+    if window >= 5 and bands >= window:
+        spec = savgol_filter(spec, window_length=window, polyorder=3)
+    return spec
 
 
 # ----------------------------------------------------------------------
 # SINGLE IMAGE PREDICTION
 # ----------------------------------------------------------------------
-
 def predict_single_image(hdr_path, model, scaler, pca, class_names):
     """
-    Predict class for ONE hyperspectral image.
+    Predict class for ONE hyperspectral .hdr image.
 
     Returns:
         predicted_class (str)
@@ -88,19 +110,18 @@ def predict_single_image(hdr_path, model, scaler, pca, class_names):
     if cube is None:
         return None, 0.0, {}
 
-    spectrum = extract_mean_spectrum(cube)
+    spectrum = extract_median_spectrum(cube)
     X = spectrum.reshape(1, -1)
 
-    # Preprocessing
     X_scaled = scaler.transform(X)
     X_pca = pca.transform(X_scaled)
 
-    # Prediction
+    # --- use probabilities directly ---
     probs = model.predict_proba(X_pca)[0]
-    label = model.predict(X_pca)[0]
+    idx = int(np.argmax(probs))          # index of most probable class
 
-    predicted_class = class_names[label]
-    confidence = probs[label]
+    predicted_class = class_names[idx]
+    confidence = float(probs[idx])
 
     prob_dict = {
         class_names[i]: float(probs[i])
@@ -109,21 +130,19 @@ def predict_single_image(hdr_path, model, scaler, pca, class_names):
 
     return predicted_class, confidence, prob_dict
 
-
 # ----------------------------------------------------------------------
 # BATCH PREDICTION
 # ----------------------------------------------------------------------
-
 def predict_batch(folder_path, model, scaler, pca, class_names):
     """Predict all .hdr images inside a folder."""
 
-    hdr_files = [f for f in os.listdir(folder_path) if f.endswith(".hdr")]
+    hdr_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".hdr")]
 
     if len(hdr_files) == 0:
         print(f"\n[ERROR] No .hdr files found in folder: {folder_path}")
         return
 
-    print(f"\nPredicting {len(hdr_files)} images from {folder_path}...")
+    print(f"\nPredicting {len(hdr_files)} images in folder: {folder_path}")
     print("=" * 70)
 
     results = []
@@ -142,19 +161,18 @@ def predict_batch(folder_path, model, scaler, pca, class_names):
             "filename": file,
             "predicted_class": pred_class,
             "confidence": conf,
-            "probabilities": prob_dict
+            "probabilities": prob_dict,
         }
         results.append(result)
 
         print("\n" + "-" * 60)
         print("File:", file)
         print("Predicted:", pred_class)
-        print(f"Confidence: {conf:.4f} ({conf*100:.2f}%)")
+        print(f"Confidence: {conf:.4f} ({conf * 100:.2f}%)")
         print("Probabilities:")
         for cls, p in prob_dict.items():
             print(f"  {cls}: {p:.4f}")
 
-    # Save batch result
     output_file = os.path.join(folder_path, "predictions.json")
     with open(output_file, "w") as f:
         json.dump(results, f, indent=4)

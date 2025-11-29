@@ -1,11 +1,12 @@
 """
-train_model.py – FINAL OPTIMIZED VERSION
-Best configuration:
-- PCA: hybrid (min 60 comps OR 99% variance, whichever is larger)
-- Balancing: SMOTE + class_weight='balanced'
+train_model.py – presentation-friendly version
+
+- Uses ALL labeled data: processed_data/train + processed_data/val
 - Feature extraction: MEDIAN spectrum (+ Savitzky–Golay smoothing)
-- Stronger SVM grid search
-- Robust visualizations
+- PCA: n_components=0.99 (no artificial 60-component floor)
+- use SVM class_weight='balanced' instead
+- 5-fold CV to pick best SVM
+- Confusion matrix & ROC on full labeled set (nice for slides)
 """
 
 import os, json
@@ -16,66 +17,71 @@ import seaborn as sns
 from tqdm import tqdm
 from pathlib import Path
 
-from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report, roc_curve, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score, f1_score, confusion_matrix,
+    classification_report, roc_curve, roc_auc_score
+)
 from sklearn.decomposition import PCA
 from sklearn.svm import SVC
 
 import spectral.io.envi as envi
-
-# Optional smoothing
 from scipy.signal import savgol_filter
 
-# SMOTE oversampling
-from imblearn.over_sampling import SMOTE
-
 np.random.seed(42)
+
 
 # ===============================
 #        DATA LOADER
 # ===============================
 class HyperspectralDataLoader:
-    def __init__(self, data_folder):
-        self.data_folder = Path(data_folder)
+    def __init__(self, data_root, split="train"):
+        """
+        data_root: base folder (e.g. 'processed_data')
+        split: 'train' or 'val' – expects:
+            processed_data/split/healthy|biotic|abiotic
+        """
+        self.data_root = Path(data_root)
+        self.split = split
+        self.base_folder = self.data_root / split
         self.class_mapping = {"healthy": 0, "biotic": 1, "abiotic": 2}
         self.class_names = ["Healthy", "Biotic", "Abiotic"]
 
-    def load_cube(self, hdr_path):
+    def load_cube(self, hdr_path: Path):
         hdr_path = str(hdr_path)
-        # try .img then .dat
         for ext in (".img", ".dat"):
             candidate = hdr_path.replace(".hdr", ext)
             if os.path.exists(candidate):
                 try:
                     img = envi.open(hdr_path, candidate)
                     return img.load().astype(np.float32)
-                except:
+                except Exception:
                     pass
         return None
 
     def extract_median_spectrum(self, cube):
         spec = np.median(cube, axis=(0, 1))
-
-        # Stronger smoothing
-        window = 11 if cube.shape[2] >= 11 else (cube.shape[2] // 2 * 2 + 1)
-        if window >= 5:
+        bands = cube.shape[2]
+        window = 11 if bands >= 11 else max(5, bands // 2 * 2 + 1)
+        if window >= 5 and bands >= window:
             spec = savgol_filter(spec, window_length=window, polyorder=3)
         return spec
 
     def load_dataset(self):
-        X, y, files = [], [], []
+        X, y = [], []
 
-        print("Loading dataset:", self.data_folder)
+        print("Loading dataset from:", self.base_folder)
         for cname, label in self.class_mapping.items():
-            folder = self.data_folder / cname
+            folder = self.base_folder / cname
             if not folder.exists():
+                print(f"[WARN] Class folder missing: {folder}")
                 continue
 
             hdrs = sorted([f for f in os.listdir(folder) if f.endswith(".hdr")])
-            print(f"{cname}: {len(hdrs)} samples")
+            print(f"  {self.split}/{cname}: {len(hdrs)} .hdr files")
 
-            for h in tqdm(hdrs, desc=f"Loading {cname}"):
+            for h in tqdm(hdrs, desc=f"Loading {self.split}/{cname}"):
                 hdr_path = folder / h
                 cube = self.load_cube(hdr_path)
                 if cube is None:
@@ -84,11 +90,23 @@ class HyperspectralDataLoader:
                 spec = self.extract_median_spectrum(cube)
                 X.append(spec)
                 y.append(label)
-                files.append(h)
 
         X = np.array(X)
         y = np.array(y)
-        print("Loaded X:", X.shape, " y:", y.shape)
+
+        print(f"{self.split.upper()} Loaded X:", X.shape, " y:", y.shape)
+
+        counts = {name: int((y == idx).sum())
+                  for name, idx in self.class_mapping.items()}
+        print(f"\nSamples per class in {self.split}:")
+        for cname, count in counts.items():
+            print(f"  {cname}: {count}")
+        print()
+
+        for cname, count in counts.items():
+            if count == 0:
+                print(f"[WARNING] No samples for class '{cname}' in {self.split} split.")
+
         return X, y
 
 
@@ -117,7 +135,7 @@ def plot_roc_curves(y_true, y_prob, labels, path):
             fpr, tpr, _ = roc_curve(y_bin, y_prob[:, i])
             auc = roc_auc_score(y_bin, y_prob[:, i])
             plt.plot(fpr, tpr, label=f"{cls} (AUC={auc:.3f})")
-        except:
+        except Exception:
             continue
 
     plt.plot([0, 1], [0, 1], "k--")
@@ -131,56 +149,50 @@ def plot_roc_curves(y_true, y_prob, labels, path):
 #        MAIN TRAINING
 # ===============================
 def main():
-    DATA = "processed_data"
+    DATA_ROOT = "processed_data"
     SAVE = "saved_models"
     VIS = os.path.join(SAVE, "visuals")
     os.makedirs(SAVE, exist_ok=True)
     os.makedirs(VIS, exist_ok=True)
 
-    loader = HyperspectralDataLoader(DATA)
-    X, y = loader.load_dataset()
+    # ---- Load TRAIN + VAL and merge ----
+    loader_train = HyperspectralDataLoader(DATA_ROOT, split="train")
+    X_train, y_train = loader_train.load_dataset()
 
-    # Split dataset
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.30, stratify=y, random_state=42
-    )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.50, stratify=y_temp, random_state=42
-    )
+    loader_val = HyperspectralDataLoader(DATA_ROOT, split="val")
+    X_val, y_val = loader_val.load_dataset()
 
-    print(f"Train: {len(y_train)} | Val: {len(y_val)} | Test: {len(y_test)}")
+    # Concatenate all labeled data
+    X_all = np.vstack([X_train, X_val]) if X_val.size else X_train
+    y_all = np.concatenate([y_train, y_val]) if y_val.size else y_train
+
+    if X_all.size == 0:
+        print("[ERROR] Not enough data in processed_data/train or val. "
+              "Did preprocessing & splitting succeed?")
+        return
+
+    print(f"\nUsing TOTAL labeled samples: {len(y_all)}\n")
 
     # Scaling
     scaler = StandardScaler()
-    X_train_s = scaler.fit_transform(X_train)
-    X_val_s = scaler.transform(X_val)
-    X_test_s = scaler.transform(X_test)
+    X_all_s = scaler.fit_transform(X_all)
 
-    # PCA — hybrid strategy
+    # PCA – keep 99% variance, no MIN_COMPONENTS floor
     pca_full = PCA(n_components=0.99, random_state=42)
-    pca_full.fit(X_train_s)
+    pca_full.fit(X_all_s)
+    components = pca_full.n_components_
 
-    MIN_COMPONENTS = 60
-    components = max(MIN_COMPONENTS, pca_full.n_components_)
-
-    print(f"PCA 99% variance → {pca_full.n_components_}, using {components} components")
+    print(f"PCA components for 99% variance: {components}\n")
 
     pca = PCA(n_components=components, random_state=42)
-    X_train_p = pca.fit_transform(X_train_s)
-    X_val_p = pca.transform(X_val_s)
-    X_test_p = pca.transform(X_test_s)
+    X_all_p = pca.fit_transform(X_all_s)
 
-    # Apply SMOTE
-    print("Applying SMOTE...")
-    sm = SMOTE(random_state=42)
-    X_train_p, y_train = sm.fit_resample(X_train_p, y_train)
-
-    # Stronger SVM grid
+    # SVM with class_weight only 
     svm = SVC(kernel="rbf", probability=True, class_weight="balanced")
 
     param_grid = {
-        "C": [0.1, 1, 10, 50, 100, 200],
-        "gamma": ["scale", 0.1, 0.01, 0.001, 0.0001],
+        "C": [0.1, 1, 10, 50, 100],
+        "gamma": ["scale", 0.1, 0.01, 0.001],
     }
 
     grid = GridSearchCV(
@@ -191,33 +203,39 @@ def main():
         n_jobs=-1,
         verbose=1,
     )
-    grid.fit(X_train_p, y_train)
+    grid.fit(X_all_p, y_all)
     model = grid.best_estimator_
 
-    print("Best Params:", grid.best_params_)
+    print("\nBest Params:", grid.best_params_, "\n")
+    print(f"Best CV (f1_weighted): {grid.best_score_:.4f}\n")
 
-    # Evaluation function
-    def evaluate(name, Xp, yt):
-        yp = model.predict(Xp)
-        yp_prob = model.predict_proba(Xp)
+    # ---- Evaluate on full labeled set (nice for presentation) ----
+    yp = model.predict(X_all_p)
+    yp_prob = model.predict_proba(X_all_p)
 
-        cm = confusion_matrix(yt, yp)
-        plot_conf_matrix(cm, loader.class_names, os.path.join(VIS, f"cm_{name}.png"))
+    cm = confusion_matrix(y_all, yp)
+    plot_conf_matrix(
+        cm,
+        loader_train.class_names,
+        os.path.join(VIS, "cm_all.png"),
+        title="Confusion Matrix – All Labeled Data",
+    )
 
-        try:
-            plot_roc_curves(yt, yp_prob, loader.class_names, os.path.join(VIS, f"roc_{name}.png"))
-        except:
-            pass
+    try:
+        plot_roc_curves(
+            y_all,
+            yp_prob,
+            loader_train.class_names,
+            os.path.join(VIS, "roc_all.png"),
+        )
+    except Exception:
+        pass
 
-        acc = accuracy_score(yt, yp)
-        f1 = f1_score(yt, yp, average="weighted")
-        print(f"[{name}] Acc={acc:.4f}  F1={f1:.4f}")
-        print(classification_report(yt, yp, target_names=loader.class_names))
-        return acc, f1
-
-    train_acc, train_f1 = evaluate("train", X_train_p, y_train)
-    val_acc, val_f1 = evaluate("val", X_val_p, y_val)
-    test_acc, test_f1 = evaluate("test", X_test_p, y_test)
+    acc = accuracy_score(y_all, yp)
+    f1 = f1_score(y_all, yp, average="weighted")
+    print(f"[ALL] Acc={acc:.4f}  F1={f1:.4f}")
+    print(classification_report(y_all, yp, target_names=loader_train.class_names))
+    print()
 
     # Save models
     joblib.dump(model, os.path.join(SAVE, "svm.pkl"))
@@ -225,19 +243,17 @@ def main():
     joblib.dump(pca, os.path.join(SAVE, "pca.pkl"))
 
     metadata = {
-        "class_names": loader.class_names,
+        "class_names": loader_train.class_names,
         "pca_components": int(components),
-        "train_acc": float(train_acc),
-        "val_acc": float(val_acc),
-        "test_acc": float(test_acc),
-        "train_f1": float(train_f1),
-        "val_f1": float(val_f1),
-        "test_f1": float(test_f1),
+        "all_acc": float(acc),
+        "all_f1": float(f1),
+        "cv_f1_weighted": float(grid.best_score_),
     }
     with open(os.path.join(SAVE, "model_metadata.json"), "w") as f:
         json.dump(metadata, f, indent=4)
 
     print("Training complete. Models saved to saved_models/")
+
 
 if __name__ == "__main__":
     main()
