@@ -173,7 +173,7 @@ def main():
 
     print(f"\nUsing TOTAL labeled samples: {len(y_all)}\n")
 
-    # Scaling
+    # Scaling / z score normalization
     scaler = StandardScaler()
     X_all_s = scaler.fit_transform(X_all)
 
